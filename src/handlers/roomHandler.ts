@@ -1,19 +1,54 @@
 import { Socket } from "socket.io";
-import { v4 as uuidv4 } from "uuid";
+import { v4 as UUIDv4 } from "uuid";
+import IRoomParams from "../interfaces/IRoomParams";
 
+const rooms : Record<string, string[]> = {};
 const roomHandler = (socket: Socket) => {
 
+  
+
   const createRoom = () => {
-    const roomId = uuidv4();
-    socket.join(roomId);
-    socket.emit("room-created", { roomId });
-    console.log("Room created with id:",  roomId );
+        // this will be our unique room id in which multiple
+        // connection will exchange data
+        const roomId = UUIDv4();
+
+        // we will make the socket connection enter a new room
+        socket.join(roomId);
+
+        rooms[roomId] = []; // create a new entry for the room
+
+        // we will emit an event from server side that
+        // socket connection has been added to a room
+        socket.emit("room-created", { roomId });
+        console.log("Room created with id", roomId);
+    };
+
+
+  const joinedRoom = ({ roomId, peerId }: IRoomParams) => {
+      console.log("joined room called", rooms, roomId, peerId);
+        if(rooms[roomId]) {
+            // If the given roomId exist in the in memory db
+            console.log("New user has joined room", roomId, "with peer id as", peerId);
+            // the moment new user joins, add the peerId to the key of roomId
+            rooms[roomId].push(peerId);
+            console.log("added peer to room", rooms);
+            socket.join(roomId); // make the user join the socket room
+
+            // whenever anyone joins the room
+
+            socket.on("ready", () => {
+                // from the frontend once someone joins the room we will emit a ready event
+                // then from our server we will emit an event to all the clients conn that a new peer has added
+                socket.to(roomId).emit("user-joined", {peerId}); 
+            })
+
+            // below event is for logging purpose
+            socket.emit("get-users", {
+                roomId,
+                participants: rooms[roomId]
+            });
+        }
   };
-
-
-  const joinedRoom = ({ roomId }: { roomId: string }) => {
-    console.log("New user has joined the room", roomId);
-  }
 
   socket.on("create-room", createRoom);
   socket.on("joined-room", joinedRoom);
